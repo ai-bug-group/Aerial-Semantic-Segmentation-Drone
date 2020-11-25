@@ -124,7 +124,8 @@ class SemanticSegmentation(KerasBase):
               batch_size: int,
               lr: float,
               epochs: int,
-              initial_epoch: int):
+              initial_epoch: int,
+              split_train: int):
         """
         训练
         :param data: 训练数据
@@ -134,14 +135,15 @@ class SemanticSegmentation(KerasBase):
         :param lr: 学习率
         :param epochs: 训练轮次
         :param initial_epoch: 初始轮次
+        :param split_train: 训练数据、验证数据切割线
         :return: 暂无
         """
         self.model.compile(loss=loss,
                            optimizer=Adam(lr=lr),
                            metrics=['accuracy', mean_iou])
-        self.model.fit_generator(self.data_generator(data[:num_train], batch_size),
+        self.model.fit_generator(self.data_generator(data[:split_train], batch_size),
                                  steps_per_epoch=max(1, num_train // batch_size),
-                                 validation_data=self.data_generator(data[num_train:], batch_size),
+                                 validation_data=self.data_generator(data[split_train:], batch_size),
                                  validation_steps=max(1, num_val // batch_size),
                                  epochs=epochs,
                                  initial_epoch=initial_epoch,
@@ -175,7 +177,8 @@ if __name__ == "__main__":
         bz1,
         lr1,
         30,
-        0
+        0,
+        num_train
     )
     ss.save_weights_only(log_dir + 'middle1.h5')
 
@@ -187,6 +190,7 @@ if __name__ == "__main__":
         bz2,
         lr2,
         60,
-        30
+        30,
+        num_train
     )
     ss.save_weights_only(log_dir + 'last1.h5')
