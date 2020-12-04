@@ -115,10 +115,10 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     x = Dropout(0.1)(x)
 
     """
-    low-level feature(其实是原始图片的信息，但是经过了主干网络)
+    论文中说下采样by4
     """
     # skip1.shape[1:3] 为 50,75
-    # 50,75,256
+    # 50,75,256（200/4, 300/4）
     x = Lambda(lambda xx: tf.image.resize_images(x, skip1.shape[1:3]))(x)
 
     """
