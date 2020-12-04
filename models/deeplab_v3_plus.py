@@ -56,7 +56,7 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
     return x
 
 
-def Deeplabv3(input_shape=(300, 200, 3), classes=23, alpha=1.):
+def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     img_input = Input(shape=input_shape)
 
     """
