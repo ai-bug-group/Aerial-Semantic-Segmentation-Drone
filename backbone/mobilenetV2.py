@@ -2,8 +2,17 @@ from keras.activations import relu
 from keras.layers import Conv2D, DepthwiseConv2D
 from keras.layers import Add, Activation, BatchNormalization
 
+# 首选轻量级的模型来测试，减少实验的时间成本（在我笔记本上就能测试）
+
 
 def _make_divisible(v, divisor, min_value=None):
+    """
+    让使其结果可以被8整除，因为使用到了膨胀系数α
+    :param v:
+    :param divisor:
+    :param min_value:
+    :return:
+    """
     if min_value is None:
         min_value = divisor
     new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
@@ -56,7 +65,7 @@ def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, ski
 
 def mobilenetV2(inputs, alpha=1):
     first_block_filters = _make_divisible(32 * alpha, 8)
-    # 416,416 -> 208,208
+    # 200,300,3 -> 200,300,3
     x = Conv2D(first_block_filters,
                kernel_size=3,
                strides=(2, 2), padding='same',
@@ -68,13 +77,13 @@ def mobilenetV2(inputs, alpha=1):
     x = _inverted_res_block(x, filters=16, alpha=alpha, stride=1,
                             expansion=1, block_id=0, skip_connection=False)
 
-    # 208,208 -> 104,104
+    # 100,150,3 -> 25,38,3
     x = _inverted_res_block(x, filters=24, alpha=alpha, stride=2,
                             expansion=6, block_id=1, skip_connection=False)
     x = _inverted_res_block(x, filters=24, alpha=alpha, stride=1,
                             expansion=6, block_id=2, skip_connection=True)
     skip1 = x
-    # 104,104 -> 52,52
+    # 100,150,3 -> 25,38,3
     x = _inverted_res_block(x, filters=32, alpha=alpha, stride=2,
                             expansion=6, block_id=3, skip_connection=False)
     x = _inverted_res_block(x, filters=32, alpha=alpha, stride=1,
@@ -105,6 +114,7 @@ def mobilenetV2(inputs, alpha=1):
     x = _inverted_res_block(x, filters=160, alpha=alpha, stride=1, rate=4,
                             expansion=6, block_id=15, skip_connection=True)
 
+    # (25, 38, 320)
     x = _inverted_res_block(x, filters=320, alpha=alpha, stride=1, rate=4,
                             expansion=6, block_id=16, skip_connection=False)
     return x, skip1

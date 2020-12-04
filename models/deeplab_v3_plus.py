@@ -140,12 +140,12 @@ def Deeplabv3(input_shape=(300, 200, 3), classes=23, alpha=1.):
     x = SepConv_BN(x, 256, 'decoder_conv1',
                    depth_activation=True, epsilon=1e-5)
 
-    # 300,200,3，取出最终需要还原的图片大小
+    # 200,300,3，取出最终需要还原的图片大小
     size_before3 = tf.keras.backend.int_shape(img_input)
 
     # 50,75,23
     x = Conv2D(classes, (1, 1), padding='same')(x)
-    # 上采样回原始大小+23个语义类别(300,200,23)
+    # 上采样回原始大小+23个语义类别(200,300,23)
     x = Lambda(lambda xx: tf.image.resize_images(xx, size_before3[1:3]))(x)
 
     # =flatten，(6000, 23)
