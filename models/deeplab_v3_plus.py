@@ -21,8 +21,19 @@ from keras import backend as K
 from backbone.mobilenetV2 import mobilenetV2
 
 
-# 深度可分离空洞卷积 = depthwise + pointwise + atrous conv
 def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activation=False, epsilon=1e-3):
+    """
+    深度可分离空洞卷积 = depthwise + pointwise + atrous conv
+    :param x: 图片
+    :param filters: output的dim
+    :param prefix: 名字前缀
+    :param stride: 步幅
+    :param kernel_size: 卷积核大小
+    :param rate: 膨胀率
+    :param depth_activation: 是否每层激活
+    :param epsilon: BN中防止稀疏的一个小数值
+    :return:
+    """
     # 计算padding的数量，hw是否需要收缩
     # out_height = ceil(float(in_height)) / float(strides[1])
     # out_width = ceil(float(in_width)) / float(strides[2])
@@ -63,6 +74,15 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
 
 
 def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
+    """
+    DeepLabV3+网络结构
+    :param input_shape: 输入图片的原始形状
+    :param classes: 语义分割的类别（包括背景）
+    :param alpha: mobileV2中的超参，a<(0,1].所有层的 通道数（channel） 乘以a参数(四舍五入)
+                  模型大小近似下降到原来的 a2倍，计算量下降到原来的 α2倍。这里不过多的引入。
+    :return:model: keras封装的模型
+                   -type：keras.models.Model
+    """
     img_input = Input(shape=input_shape)
 
     """
