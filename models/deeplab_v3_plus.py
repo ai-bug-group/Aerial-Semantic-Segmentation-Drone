@@ -47,7 +47,7 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
         pad_total = kernel_size_effective - 1
         pad_beg = pad_total // 2
         pad_end = pad_total - pad_beg
-        # 告诉这个一层先要变成的HW,自动在x的output的tensor axis = [1:3]周围填充零，我理解是如此，感兴趣看了看下具体的实现
+        # 告诉这个一层先要变成的HW,自动在x的output的tensor axis = [1:3]周围填充零，我理解是如此，感兴趣的可以看下具体的实现
         x = ZeroPadding2D((pad_beg, pad_end))(x)
         depth_padding = 'valid'
 
