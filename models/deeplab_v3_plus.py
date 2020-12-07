@@ -77,7 +77,7 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     Encoder: 1*1 conv + 3*3 atrous conv(with different rate:6,12,18) + image pooling 
     """
     # 全部求平均后，再利用expand_dims扩充维度，1x1
-    # shape = 320
+    # shape = 320: (25,38,320) -> (38,320) -> (320,)
     b4 = GlobalAveragePooling2D()(x)
 
     # 1x320
