@@ -17,7 +17,6 @@ from models.deeplab_v3_plus import Deeplabv3
 from utils.metric import mean_iou
 from utils.path_utils import WEIGHTS_PATH_MOBILE_V2
 
-
 CLASSES = 23
 HEIGHT = 300
 WIDTH = 200
