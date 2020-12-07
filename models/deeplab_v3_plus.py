@@ -24,10 +24,10 @@ from backbone.mobilenetV2 import mobilenetV2
 # 深度可分离空洞卷积 = depthwise + pointwise + atrous conv
 def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activation=False, epsilon=1e-3):
     # 计算padding的数量，hw是否需要收缩
+    # out_height = ceil(float(in_height)) / float(strides[1])
+    # out_width = ceil(float(in_width)) / float(strides[2])
     if stride == 1:
         # 步幅=1：保证开始卷积核的中心在原始图片的顶点上
-        # out_height = ceil(float(in_height)) / float(strides[1])
-        # out_width = ceil(float(in_width)) / float(strides[2])
         depth_padding = 'same'
     else:
         # 大于一，为了保证hw正常压缩率按照膨胀率和卷积和的比例用0填充这个tensor
