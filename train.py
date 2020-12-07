@@ -84,7 +84,7 @@ class SemanticSegmentation(KerasBase):
             monitor='val_loss',
             save_weights_only=True,
             save_best_only=True,
-            period=1
+            period=3
         )
         # 学习率下降的方式，val_loss 2次不下降就下降学习率继续训练
         self.reduce_lr = ReduceLROnPlateau(
