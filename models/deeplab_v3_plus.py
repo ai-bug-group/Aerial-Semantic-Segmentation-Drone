@@ -25,12 +25,18 @@ from backbone.mobilenetV2 import mobilenetV2
 def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activation=False, epsilon=1e-3):
     # 计算padding的数量，hw是否需要收缩
     if stride == 1:
+        # 步幅=1：保证开始卷积核的中心在原始图片的顶点上
+        # out_height = ceil(float(in_height)) / float(strides[1])
+        # out_width = ceil(float(in_width)) / float(strides[2])
         depth_padding = 'same'
     else:
+        # 大于一，为了保证hw正常压缩率按照膨胀率和卷积和的比例用0填充这个tensor
+        # 在图像张量的顶部、底部、左侧和右侧添加零表示的行和列（上下左右各补对应的缺的行数，（1，1）就是各补一行）
         kernel_size_effective = kernel_size + (kernel_size - 1) * (rate - 1)
         pad_total = kernel_size_effective - 1
         pad_beg = pad_total // 2
         pad_end = pad_total - pad_beg
+        # 告诉这个一层先要变成的HW,自动在x的output的tensor axis = [1:3]周围填充零，我理解是如此，感兴趣看了看下具体的实现
         x = ZeroPadding2D((pad_beg, pad_end))(x)
         depth_padding = 'valid'
 
@@ -148,7 +154,7 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     # 上采样回原始大小+23个语义类别(200,300,23)
     x = Lambda(lambda xx: tf.image.resize_images(xx, size_before3[1:3]))(x)
 
-    # =flatten，(6000, 23)
+    # =flatten（h,w），(6000, 23)
     x = Reshape((-1, classes))(x)
     # 一张图片上每一个像素点，在23个类别的softmax概率分布，一共6000个点
     x = Softmax()(x)
