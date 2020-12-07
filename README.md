@@ -7,5 +7,5 @@
            RefineNet
            PSPNet
            deeplabv3+预测代码、效果实验
-           MASK-RCNN源码
+           MASK-RCNN源码（instance-segmentation）
 # MASK-RCNN的代码真的复杂啊=。=
