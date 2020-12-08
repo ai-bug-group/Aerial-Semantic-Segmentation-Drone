@@ -141,10 +141,10 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     x = Dropout(0.1)(x)
 
     """
-    论文中说下采样by4
+    论文中说上采样by4
     """
-    # skip1.shape[1:3] 为 50,75
-    # 50,75,256（200/4, 300/4）
+    # skip1.shape[1:3] 为 200,300
+    # 50,75,256（200=50*4, 300=75*4）
     x = Lambda(lambda xx: tf.image.resize_images(x, skip1.shape[1:3]))(x)
 
     """
@@ -171,7 +171,7 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
 
     # 50,75,23
     x = Conv2D(classes, (1, 1), padding='same')(x)
-    # 上采样回原始大小+23个语义类别(200,300,23)
+    # 上采样回原始大小+23个语义类别(200,300,23)，和上面说的上采样一样
     x = Lambda(lambda xx: tf.image.resize_images(xx, size_before3[1:3]))(x)
 
     # =flatten（h,w），(6000, 23)
