@@ -144,7 +144,7 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     论文中说上采样by4
     """
     # skip1.shape[1:3] 为 200,300
-    # 50,75,256（200=50*4, 300=75*4）
+    # 200,300,256（200=50*4, 300=75*4）
     x = Lambda(lambda xx: tf.image.resize_images(x, skip1.shape[1:3]))(x)
 
     """
