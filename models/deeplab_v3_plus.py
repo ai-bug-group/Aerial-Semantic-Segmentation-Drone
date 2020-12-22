@@ -38,7 +38,7 @@ def SepConv_BN(x, filters, prefix, stride=1, kernel_size=3, rate=1, depth_activa
     # out_height = ceil(float(in_height)) / float(strides[1])
     # out_width = ceil(float(in_width)) / float(strides[2])
     if stride == 1:
-        # 步幅=1：保证开始卷积核的中心在原始图片的顶点上
+        # 步幅=1：保证开始时卷积核的中心在原始图片的顶点上
         depth_padding = 'same'
     else:
         # 大于一，为了保证hw正常压缩率按照膨胀率和卷积和的比例用0填充这个tensor
@@ -174,9 +174,9 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     # 上采样回原始大小+23个语义类别(200,300,23)，和上面说的上采样一样
     x = Lambda(lambda xx: tf.image.resize_images(xx, size_before3[1:3]))(x)
 
-    # =flatten（h,w），(6000, 23)
+    # =flatten（h,w），(60000, 23)
     x = Reshape((-1, classes))(x)
-    # 一张图片上每一个像素点，在23个类别的softmax概率分布，一共6000个点
+    # 一张图片上每一个像素点，在23个类别的softmax概率分布，一共60000个点
     x = Softmax()(x)
 
     inputs = img_input
