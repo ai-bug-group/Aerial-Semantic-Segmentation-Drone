@@ -13,8 +13,8 @@ from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 
 from base.keras_base import KerasBase
-# from models.deeplab_v3_plus import Deeplabv3
-from models.FCN_8 import fcn_8
+from models.deeplab_v3_plus import Deeplabv3
+# from models.FCN_8 import fcn_8
 from utils.metric import mean_iou
 from utils.path_utils import WEIGHTS_PATH_MOBILE_V2
 
@@ -109,7 +109,7 @@ class SemanticSegmentation(KerasBase):
         :return: model: keras的模型结构的封装
                  -type: Model
         """
-        self.model = fcn_8(classes=CLASSES, input_shape=(WIDTH, HEIGHT, 3))
+        self.model = Deeplabv3(classes=CLASSES, input_shape=(WIDTH, HEIGHT, 3))
 
         weights_path = get_file('deeplabv3_mobilenetv2_tf_dim_ordering_tf_kernels.h5',
                                 WEIGHTS_PATH_MOBILE_V2,
