@@ -1,5 +1,14 @@
 # Aerial-Semantic-Segmentation-Drone
 # dataset: https://www.kaggle.com/bulentsiyah/semantic-drone-dataset
+# Multi-GPU:
+           Example:
+           config:{'strategy': 
+           tf.distribute.MirroredStrategy(devices=[
+                                                   "/gpu:2", 
+                                                   "/gpu:3", 
+                                                   "/gpu:4"])
+           CUDA_VISIBLE_DEVICES="2,3,4" python train_v2.py
+           
 # TODO：
            增加图片强化：缩放、crop等
            deeplabv3的tf.estimator下多GPU训练
