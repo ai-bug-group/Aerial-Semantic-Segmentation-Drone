@@ -7,7 +7,7 @@
                                                    "/gpu:2", 
                                                    "/gpu:3", 
                                                    "/gpu:4"])
-           CUDA_VISIBLE_DEVICES="2,3,4" python train_v2.py
+           CUDA_VISIBLE_DEVICES="2,3,4" python train.py
            
 # TODO：
            增加图片强化：缩放、crop等
