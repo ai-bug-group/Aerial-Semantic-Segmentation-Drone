@@ -73,7 +73,7 @@ class DistributedDataGenerator:
         :param mask_list:[标注1，标注2，''']
                          -type: Tensor
         :return: image:[(none,none,3),(none,none,3),...]
-                 mask:[(none,none,23),(none,none,23),...]
+                 mask:[(none,none,classes),(none,none,classes),...]
         """
         image = self.read_img(image_list)
         mask = self.read_img(mask_list, is_mask=True)

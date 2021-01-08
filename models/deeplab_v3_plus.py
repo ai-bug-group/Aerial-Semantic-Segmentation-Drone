@@ -170,9 +170,7 @@ class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
         """
         # 原作者是建了个随机同shape的tensor为了知道任意shape的feature map被下采样后的形状
         # 从而利用前后的倍率来告诉tf.keras.layers.UpSampling2D需要怎样还原
-        # 但是这样没法还原奇数的shape，这里我已经优化，但是这里我还没更新
-        # todo
-        dummy_tensor = tf.random.normal(input_shape)
+        # 但是这样没法还原奇数的shape，这里我已经优化，已更新
 
         self.avg_pool = tf.keras.layers.AveragePooling2D(pool_size=(input_shape[-3],
                                                                     input_shape[-2]))
@@ -184,15 +182,7 @@ class AtrousSpatialPyramidPooling(tf.keras.layers.Layer):
         self.conv2 = AtrousSpatialPyramidPooling._get_conv_block(kernel_size=1,
                                                                  dilation_rate=1)
 
-        dummy_tensor = self.conv1(self.avg_pool(dummy_tensor))
-
-        self.pool = tf.keras.layers.UpSampling2D(
-            size=(
-                input_shape[-3] // dummy_tensor.shape[1],
-                input_shape[-2] // dummy_tensor.shape[2]
-            ),
-            interpolation='bilinear'
-        )
+        self.pool = tf.keras.layers.Lambda(lambda x: tf.image.resize(x, input_shape[1:3]))
 
         self.out1, self.out6, self.out12, self.out18 = map(
             lambda tup: AtrousSpatialPyramidPooling._get_conv_block(kernel_size=tup[0],
