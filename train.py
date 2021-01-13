@@ -1,255 +1,232 @@
 # -*- coding: utf-8 -*-
-# @Time    : 2021/01/07
+# @Time    : 2020/11/25
 # @Author  : young
-# @File    : train(v3).py
+# @File    : train.py
 # @Software: PyCharm
+import os
+import numpy as np
 import tensorflow as tf
 
+from glob import glob
+from cv2 import imread, resize
+from keras import backend as K
+from keras.utils.data_utils import get_file
+from keras.optimizers import Adam
+from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 
-from models.deeplab_v3_plus import DeeplabV3Plus
-from tensorflow.keras.metrics import MeanIoU
+from base.keras_base import KerasBase
+from models.deeplab_v3_plus import Deeplabv3
+from utils.metric import mean_iou
+from utils.path_utils import WEIGHTS_PATH_MOBILE_V2
+
+print(tf.__version__)
+assert tf.__version__ == '1.13.1' or tf.__version__ == '1.14.0'
+
+GPU = True
+CLASSES = 23
+HEIGHT = 640
+WIDTH = 320
+
+if GPU:
+    CUDA_VISIBLE_DEVICES = "2"
+    os.environ['CUDA_VISIBLE_DEVICES'] = CUDA_VISIBLE_DEVICES
 
 
-class DistributedDataGenerator:
+def data_generator(files, batch_size):
     """
-    tf2.0+版本下多GPU模式已经不支持keras的fit_generator,
-    改成与之前tf1.0+中estimator使用的tf.data.Dataset
-    这种方式可以采用tf原生的图片读取，比使用cv2效率更高
-    并且原生的支持tf_records
+    语义分割训练数据生成器
+    :param files: 图片数据
+    :param batch_size: 批次大小
+    :return:
     """
-    def __init__(self, configs):
-        self.configs = configs
-        self.assert_dataset()
+    # 获取总长度
+    n = len(files)
+    i = 0
+    while True:
+        x_train = []
+        y_train = []
+        # 获取一个batch_size大小的数据
+        for _ in range(batch_size):
+            if i == 0:
+                # 刚开始先打乱数据
+                np.random.shuffle(files)
+            image_path = files[i][0]
+            mask_path = files[i][1]
+            # 从文件中读取原始图像
+            image = imread(image_path)
 
-    def assert_dataset(self):
-        assert 'images' in self.configs and 'labels' in self.configs
-        assert len(self.configs['images']) == len(self.configs['labels'])
+            # 从文件中读取语义分割的标签
+            mask = imread(mask_path)
 
-    def __len__(self):
-        return len(self.configs['images'])
+            # resize
+            image = resize(image, (int(HEIGHT), int(WIDTH)))
+            mask = resize(mask, (int(HEIGHT), int(WIDTH)))
 
-    def read_img(self, image_path, is_mask=False):
-        """
-        通过tf.io和tf.image来读取原始图片和标注图片
-        :param image_path:图片的地址(tensor)
-                          -type:Tensor
-        :param is_mask:是否是标注图
-                       -type: boolean
-        :return:
-        """
-        image = tf.io.read_file(image_path)
-        if is_mask:
-            image = tf.image.decode_png(image, channels=1)
-            image.set_shape([None, None, 1])
-            image = (tf.image.resize(
-                images=image, size=[
-                    self.configs['height'],
-                    self.configs['width']
-                ], method="nearest"
-            ))
-            # 将之前numpy的one_hot转成tf原生
-            # (none, none, 1) -> (none, none) -> (none, none, 23)
-            # 完美适配
-            image = tf.squeeze(image, axis=-1)
-            image = tf.one_hot(indices=image, depth=self.configs['num_classes'])
-            image = tf.cast(image, tf.float32)
-        else:
-            image = tf.image.decode_png(image, channels=3)
-            image.set_shape([None, None, 3])
-            image = (tf.image.resize(images=image,
-                                     size=[self.configs['height'],
-                                           self.configs['width']
-                                           ]
-                                     ))
-            image = tf.cast(image, tf.float32) / 127.5 - 1
-        # todo 待更新数据增强
-        return image
+            # image, mask = random_crop(image, mask, HEIGHT, WIDTH)
 
-    def _map_function(self, image_list, mask_list):
-        """
-        读取原始图片和对应的标注图片路径列表
-        :param image_list:[图片1，图片2，''']
-                         -type: Tensor
-        :param mask_list:[标注1，标注2，''']
-                         -type: Tensor
-        :return: image:[(none,none,3),(none,none,3),...]
-                 mask:[(none,none,classes),(none,none,classes),...]
-        """
-        image = self.read_img(image_list)
-        mask = self.read_img(mask_list, is_mask=True)
-        return image, mask
+            # 生成标签
+            seg_labels = np.zeros((int(WIDTH), int(HEIGHT), CLASSES))
+            for c in range(CLASSES):
+                seg_labels[:, :, c] = (mask[:, :, 0] == c).astype(int)
+            seg_labels = np.reshape(seg_labels, (-1, CLASSES))
 
-    def get_dataset(self):
-        """
-        将数据转换为 tf.data.Dataset
-        这里格式要说明一下:from_tensor_slices这个一般输入是（features，labels）
-        features: [图片1，图片2，''']
-        labels:   [标注1，标注2，''']
-        :return: tf.data.Dataset
-        """
-        return tf.data.Dataset.from_tensor_slices((self.configs['images'],
-                                                   self.configs['labels'])
-                                                  )\
-            .map(self._map_function, num_parallel_calls=tf.data.experimental.AUTOTUNE)\
-            .batch(self.configs['batch_size'], drop_remainder=True)\
-            .repeat()\
-            .prefetch(tf.data.experimental.AUTOTUNE)
+            x_train.append(image)
+            y_train.append(seg_labels)
+
+            # 读完一个周期后重新开始
+            i = (i + 1) % n
+        yield np.array(x_train), np.array(y_train)
 
 
-class Trainer:
-    """
-    训练器，参数全部调整到config,
-    Trainer实例化的时候将config(dict)传进去,例子如下
-    config = {
-        'name': 'aerial_semantic_deeplabv3+',
-        'train_dataset_config': {
-            'images': sorted(glob('data/train/images/*')),
-            'labels': sorted(glob('data/train/masks/*')),
-            'num_classes': 23, 'height': 300, 'width': 200, 'batch_size': 8
-        },
-        'val_dataset_config': {
-            'images': sorted(glob('data/val/images/*')),
-            'labels': sorted(glob('data/val/masks/*')),
-            'num_classes': 23, 'height': 300, 'width': 200, 'batch_size': 8
-        },
-        'strategy': tf.distribute.MirroredStrategy(),
-        'num_classes': 23, 'height': 300, 'width': 200,
-        'backbone': 'mobilenetv2', 'learning_rate': 1e-4,
-        'checkpoint_dir': 'checkpoints/deeplabv3-plus-aerial-semantic-mobilenetv2.h5',
-        'epochs': 30
-    }
-    """
-    def __init__(self, config):
-        self.config = config
-        self._assert_config()
+def loss(y_true, y_pred):
+    return K.categorical_crossentropy(y_true, y_pred)
 
-        # load train and val data
-        train_data_generator = DistributedDataGenerator(self.config['train_dataset_config'])
-        self.train_data_length = len(train_data_generator)
-        self.train_dataset = train_data_generator.get_dataset()
-        print(str(self.train_data_length) + ' of train_data is loaded')
 
-        val_data_generator = DistributedDataGenerator(self.config['val_dataset_config'])
-        self.val_data_length = len(val_data_generator)
-        self.val_dataset = val_data_generator.get_dataset()
-        print(str(self.val_data_length) + ' of val_data is loaded')
+class SemanticSegmentation(KerasBase):
+    def __init__(self):
+        super().__init__()
+        self.lr_ph = 1e-3
+        self.loss = loss
+        self.data_generator = data_generator
 
-        self._model = None
-
-    @property
-    def model(self):
-        """
-        build_model，与之前的区别就是需要加上tf.distribute.MirroredStrategy().scope()
-        :return:
-        """
-        if self._model is not None:
-            return self._model
-
-        with self.config['strategy'].scope():
-            self._model = DeeplabV3Plus(
-                num_classes=self.config['num_classes'],
-                backbone=self.config['backbone']
-            )
-
-            self._model.compile(
-                optimizer=tf.keras.optimizers.Adam(
-                    learning_rate=self.config['learning_rate']
-                ),
-                loss=tf.keras.losses.CategoricalCrossentropy(),
-                metrics=['accuracy',
-                         MeanIoU(num_classes=self.config['num_classes'])]
-            )
-            return self._model
-
-    @staticmethod
-    def _assert_dataset_config(dataset_config):
-        assert 'images' in dataset_config and \
-            isinstance(dataset_config['images'], list)
-        assert 'labels' in dataset_config and \
-            isinstance(dataset_config['labels'], list)
-
-        assert 'height' in dataset_config and \
-            isinstance(dataset_config['height'], int)
-        assert 'width' in dataset_config and \
-            isinstance(dataset_config['width'], int)
-
-        assert 'batch_size' in dataset_config and \
-            isinstance(dataset_config['batch_size'], int)
-
-    def _assert_config(self):
-        assert 'train_dataset_config' in self.config
-        Trainer._assert_dataset_config(self.config['train_dataset_config'])
-        assert 'val_dataset_config' in self.config
-        Trainer._assert_dataset_config(self.config['val_dataset_config'])
-
-        assert 'strategy' in self.config and \
-            isinstance(self.config['strategy'], tf.distribute.Strategy)
-
-        assert 'num_classes' in self.config and \
-            isinstance(self.config['num_classes'], int)
-        assert 'backbone' in self.config and \
-            isinstance(self.config['backbone'], str)
-
-        assert 'learning_rate' in self.config and \
-            isinstance(self.config['learning_rate'], float)
-
-        assert 'checkpoint_dir' in self.config and \
-            isinstance(self.config['checkpoint_dir'], str)
-
-        assert 'epochs' in self.config and \
-            isinstance(self.config['epochs'], int)
-
-    def train(self):
-        """
-        模型训练，tf2.0+只保留fit模块了，同时可以传入之前格式data_generator,但不支持并行
-        :return: history
-        """
-        callbacks = [
-            tf.keras.callbacks.ModelCheckpoint(
-                filepath=self.config['checkpoint_dir'],
-                monitor='val_loss',
-                save_best_only=True,
-                mode='min',
-                save_weights_only=True
-            ),
-
-        ]
-        print('Train on {} samples, val on {} samples, with batch size {}.'.format(str(self.train_data_length),
-                                                                                   str(self.val_data_length),
-                                                                                   self.config['train_dataset_config']
-                                                                                   ['batch_size']))
-        history = self.model.fit(
-            self.train_dataset, validation_data=self.val_dataset,
-            steps_per_epoch=self.train_data_length //
-            self.config['train_dataset_config']['batch_size'],
-            validation_steps=self.val_data_length //
-            self.config['val_dataset_config']['batch_size'],
-            epochs=self.config['epochs'], callbacks=callbacks
+        # 保存的方式，3个epoch保存一次
+        self.checkpoint_period = ModelCheckpoint(
+            log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
+            monitor='val_loss',
+            save_weights_only=True,
+            save_best_only=True,
+            period=3
+        )
+        # 学习率下降的方式，val_loss 2次不下降就下降学习率继续训练
+        self.reduce_lr = ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=2,
+            verbose=1
+        )
+        # 是否需要提前停止训练，当val_loss一直不下降的时候意味着模型基本训练完毕，可以停止
+        self.early_stopping = EarlyStopping(
+            monitor='val_loss',
+            min_delta=0,
+            patience=6,
+            verbose=1
         )
 
-        return history
+        self.build_model()
+
+    def build_model(self):
+        """
+        构建模型的结构
+        :return: model: keras的模型结构的封装
+                 -type: Model
+        """
+        self.model = Deeplabv3(classes=CLASSES, input_shape=(WIDTH, HEIGHT, 3))
+
+        weights_path = get_file('deeplabv3_mobilenetv2_tf_dim_ordering_tf_kernels.h5',
+                                WEIGHTS_PATH_MOBILE_V2,
+                                cache_subdir='models')
+
+        self.model.load_weights(weights_path,
+                                by_name=True,
+                                skip_mismatch=True)
+
+    def train(self,
+              data: list,
+              batch_size: int,
+              lr: float,
+              epochs: int,
+              initial_epoch: int,
+              split_train: int):
+        """
+        训练
+        :param data: 训练数据
+               -type: list
+               -element: tuple
+        :param batch_size: 批次大小
+        :param lr: 学习率
+        :param epochs: 训练轮次
+        :param initial_epoch: 初始轮次
+        :param split_train: 训练数据、验证数据切割线
+        :return: 暂无
+        """
+        self.model.compile(loss=loss,
+                           optimizer=Adam(lr=lr),
+                           metrics=['accuracy', mean_iou])
+        self.model.fit_generator(self.data_generator(data[:split_train], batch_size),
+                                 steps_per_epoch=max(1, num_train // batch_size),
+                                 validation_data=self.data_generator(data[split_train:], batch_size),
+                                 validation_steps=max(1, num_val // batch_size),
+                                 epochs=epochs,
+                                 initial_epoch=initial_epoch,
+                                 callbacks=[self.checkpoint_period,
+                                            self.reduce_lr,
+                                            self.early_stopping])
+
+    def predict_one_image(self, image_dir):
+        """
+        单张简单的预测测试
+        :param image_dir:
+        :return:masks
+        """
+        image = imread(image_dir)
+        # image = image[0:400, 10:515]
+        image = tf.expand_dims(image, 0)
+        predicts = self.model.predict(image, steps=1)
+        predicts = np.squeeze(predicts, 0)
+        masks = np.argmax(predicts, axis=-1)
+        masks = np.expand_dims(np.reshape(masks, (WIDTH, HEIGHT)), axis=-1)
+        masks[masks == 1] = 255
+        masks = masks.astype(np.uint8)
+        return masks
 
 
 if __name__ == "__main__":
-    from glob import glob
-    aerial_semantic_config = {
-        'name': 'aerial_semantic_deeplabv3+',
-        'train_dataset_config': {
-            'images': sorted(glob('data/train/images/*')),
-            'labels': sorted(glob('data/train/masks/*')),
-            'num_classes': 23, 'height': 300, 'width': 200, 'batch_size': 8
-        },
-        'val_dataset_config': {
-            'images': sorted(glob('data/val/images/*')),
-            'labels': sorted(glob('data/val/masks/*')),
-            'num_classes': 23, 'height': 300, 'width': 200, 'batch_size': 8
-        },
-        'strategy': tf.distribute.MirroredStrategy(),
-        'num_classes': 23, 'height': 300, 'width': 200,
-        'backbone': 'mobilenetv2', 'learning_rate': 1e-4,
-        'checkpoint_dir': 'checkpoints/deeplabv3-plus-aerial-semantic-mobilenetv2.h5',
-        'epochs': 30
-    }
+    is_training = True
 
-    trainer = Trainer(aerial_semantic_config)
-    trainer.train()
+    data_dir = "data/all/"
+    checkpoints_dir = "checkpoints/"
+
+    # 读取数据
+    image_list = sorted(glob(data_dir + 'images/*'))
+    mask_list = sorted(glob(data_dir + 'masks/*'))
+    aerial_data = list(zip(image_list, mask_list))
+
+    # 90%用于训练，10%用于验证。
+    num_val = int(len(aerial_data) * 0.1)
+    num_train = len(aerial_data) - num_val
+
+    # 搭建语义分割模型
+    ss = SemanticSegmentation()
+    ss.print_model_summary()
+
+    if is_training:
+        # 训练策略
+        bz1 = 4
+        lr1 = 1e-3
+        print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, bz1))
+        ss.train(
+            aerial_data,
+            bz1,
+            lr1,
+            30,
+            0,
+            num_train
+        )
+        ss.save_weights_only(checkpoints_dir + 'middle1.h5')
+
+        bz2 = 8
+        lr2 = 1e-4
+        print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, bz2))
+        ss.train(
+            aerial_data,
+            bz2,
+            lr2,
+            60,
+            30,
+            num_train
+        )
+    else:
+        test_image_dir = 'data/all/images/000.jpg'
+        checkpoint = 'checkpoints/test_model.h5'
+        ss.model.load_weights(checkpoint)
+        test_result = ss.predict_one_image(test_image_dir)
