@@ -91,7 +91,7 @@ class SemanticSegmentation(KerasBase):
 
         # 保存的方式，3个epoch保存一次
         self.checkpoint_period = ModelCheckpoint(
-            log_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
+            checkpoints_dir + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
             monitor='val_loss',
             save_weights_only=True,
             save_best_only=True,
