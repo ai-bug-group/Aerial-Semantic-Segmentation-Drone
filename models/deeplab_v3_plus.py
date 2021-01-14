@@ -135,7 +135,7 @@ def Deeplabv3(input_shape=(200, 300, 3), classes=23, alpha=1.):
     # 利用conv2d压缩
     # 25,38,256
     x = Conv2D(256, (1, 1), padding='same',
-               use_bias=False, name='concat_projection')(x)
+               use_bias=False, name='concat_projection_after_aspp')(x)
     x = BatchNormalization(name='concat_projection_BN', epsilon=1e-5)(x)
     x = Activation('relu')(x)
     x = Dropout(0.1)(x)
